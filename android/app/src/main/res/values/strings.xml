@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">펫푸드 레시피</string>
-    <string name="title_activity_main">펫푸드 레시피</string>
-    <string name="package_name">com.chowchow.petfood</string>
-    <string name="custom_url_scheme">com.chowchow.petfood</string>
-</resources>
