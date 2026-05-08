@@ -1,0 +1,6 @@
+node_modules/
+dist/
+.env
+.env.local
+*.tsbuildinfo
+android/capacitor-cordova-android-plugins/.gradle/

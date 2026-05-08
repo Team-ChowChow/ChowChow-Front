@@ -1,118 +1,180 @@
-import { useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { login, logout } from "../features/auth/api";
+import { getCommunityPosts, type CommunityPost } from "../features/community/api";
+import { getMyPets, type Pet } from "../features/pet/api";
+import { getRecipes, type Recipe } from "../features/recipes/api";
+import { getMyProfile, type UserProfile } from "../features/user/api";
+import { ApiError, getAccessToken } from "../shared/api/http";
 
 type TabKey = "home" | "search" | "community" | "profile";
 
-const recipeCards = [
-  {
-    id: 1,
-    title: "두준쿠 저지방 닭가슴살 레시피",
-    tags: ["#저지방", "#다이어트"],
-    image:
-      "https://images.unsplash.com/photo-1540189549336-e6e99c3679fe?auto=format&fit=crop&w=600&q=80",
-    author: "멍멍이엄마",
-    rating: 4.8,
-  },
-  {
-    id: 2,
-    title: "연어 오메가3 영양 밥",
-    tags: ["#트렌드", "#면역력"],
-    image:
-      "https://images.unsplash.com/photo-1490645935967-10de6ba17061?auto=format&fit=crop&w=600&q=80",
-    author: "냥이집사",
-    rating: 4.9,
-  },
-  {
-    id: 3,
-    title: "소고기 채소 스튜",
-    tags: ["#퍼피/키튼", "#면역력"],
-    image:
-      "https://images.unsplash.com/photo-1547592166-23ac45744acd?auto=format&fit=crop&w=600&q=80",
-    author: "펫푸드마스터",
-    rating: 4.7,
-  },
-];
+const fallbackImage =
+  "https://images.unsplash.com/photo-1540189549336-e6e99c3679fe?auto=format&fit=crop&w=600&q=80";
 
 export default function App() {
-  const [loggedIn, setLoggedIn] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(Boolean(getAccessToken()));
   const [tab, setTab] = useState<TabKey>("home");
+  const [recipes, setRecipes] = useState<Recipe[]>([]);
+  const [posts, setPosts] = useState<CommunityPost[]>([]);
+  const [pets, setPets] = useState<Pet[]>([]);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  if (!loggedIn) {
-    return <LoginScreen onLogin={() => setLoggedIn(true)} />;
+  useEffect(() => {
+    if (!isLoggedIn) {
+      return;
+    }
+
+    async function bootstrap() {
+      setIsLoading(true);
+      setLoadError(null);
+
+      try {
+        const [recipeData, postData, petData, profileData] = await Promise.all([
+          getRecipes(),
+          getCommunityPosts(),
+          getMyPets(),
+          getMyProfile(),
+        ]);
+
+        setRecipes(recipeData);
+        setPosts(postData);
+        setPets(petData);
+        setProfile(profileData);
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 401) {
+          setLoadError("토큰이 만료되었거나 유효하지 않습니다. 다시 로그인해 주세요.");
+          setIsLoggedIn(false);
+          return;
+        }
+        setLoadError("백엔드 데이터를 불러오지 못했습니다.");
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    void bootstrap();
+  }, [isLoggedIn]);
+
+  if (!isLoggedIn) {
+    return <LoginScreen onLoginSuccess={() => setIsLoggedIn(true)} />;
   }
 
   return (
     <main className="phone-shell">
       <section className="screen-content">
-        {tab === "home" && <HomeScreen />}
-        {tab === "search" && <SearchScreen />}
-        {tab === "community" && <CommunityScreen />}
-        {tab === "profile" && <ProfileScreen onLogout={() => setLoggedIn(false)} />}
+        {loadError ? <p className="error-text">{loadError}</p> : null}
+        {isLoading ? <p className="muted">백엔드 데이터 동기화 중...</p> : null}
+        {tab === "home" && <HomeScreen recipes={recipes} />}
+        {tab === "search" && <SearchScreen recipes={recipes} />}
+        {tab === "community" && <CommunityScreen posts={posts} />}
+        {tab === "profile" && (
+          <ProfileScreen
+            profile={profile}
+            pets={pets}
+            onLogout={async () => {
+              await logout();
+              setIsLoggedIn(false);
+            }}
+          />
+        )}
       </section>
       <BottomNav tab={tab} onChange={setTab} />
     </main>
   );
 }
 
-function LoginScreen({ onLogin }: { onLogin: () => void }) {
+function LoginScreen({ onLoginSuccess }: { onLoginSuccess: () => void }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const canSubmit = email.trim().length > 0 && password.trim().length > 0;
+
+  async function handleLogin(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!canSubmit) {
+      return;
+    }
+
+    setErrorMessage(null);
+    setIsSubmitting(true);
+
+    try {
+      await login({ email: email.trim(), password });
+      onLoginSuccess();
+    } catch {
+      setErrorMessage("로그인에 실패했습니다. Supabase 계정 정보와 .env 설정을 확인해 주세요.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   return (
     <main className="phone-shell login-shell">
       <section className="screen-content login-content">
         <div className="logo-circle">🐾</div>
         <h1 className="brand-title">펫푸드 레시피</h1>
-        <p className="brand-subtitle">우리 아이를 위한 건강한 식단</p>
+        <p className="brand-subtitle">백엔드 API 연결 모드</p>
 
-        <label className="field-label">아이디</label>
-        <input className="field-input" placeholder="아이디를 입력하세요" />
+        <form className="login-form" onSubmit={handleLogin}>
+          <label className="field-label">이메일</label>
+          <input
+            className="field-input"
+            placeholder="이메일을 입력하세요"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+          />
 
-        <label className="field-label">비밀번호</label>
-        <input className="field-input" placeholder="비밀번호를 입력하세요" type="password" />
+          <label className="field-label">비밀번호</label>
+          <input
+            className="field-input"
+            placeholder="비밀번호를 입력하세요"
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+          />
 
-        <label className="auto-login-row">
-          <input type="checkbox" />
-          자동 로그인
-        </label>
+          <button className="primary-btn" disabled={!canSubmit || isSubmitting} type="submit">
+            {isSubmitting ? "로그인 중..." : "Supabase 로그인"}
+          </button>
+        </form>
 
-        <button className="primary-btn" onClick={onLogin} type="button">
-          로그인
-        </button>
-
-        <button className="kakao-btn" type="button">
-          카카오로 로그인
-        </button>
+        {errorMessage ? <p className="error-text">{errorMessage}</p> : null}
       </section>
     </main>
   );
 }
 
-function HomeScreen() {
+function HomeScreen({ recipes }: { recipes: Recipe[] }) {
+  const visibleRecipes = useMemo(() => recipes.slice(0, 4), [recipes]);
+
   return (
     <div className="page">
       <header className="top-bar">
         <h2>펫푸드 레시피</h2>
-        <div className="coin-pill">C 1,250</div>
+        <div className="coin-pill">API 연결됨</div>
       </header>
 
       <article className="hero-card">
-        <img
-          src="https://images.unsplash.com/photo-1459411621453-7b03977f4bfc?auto=format&fit=crop&w=900&q=80"
-          alt="트렌드 레시피"
-        />
-        <div className="hero-title">소고기 브로콜리</div>
+        <img src={fallbackImage} alt="대표 레시피" />
+        <div className="hero-title">{visibleRecipes[0]?.recipeTitle ?? "레시피를 불러오는 중"}</div>
       </article>
 
       <section className="ai-card">
         <p className="ai-label">AI 셰프</p>
-        <h3>우리 아이 맞춤 식단을 AI가 추천해드려요</h3>
-        <p>건강 상태, 알러지, 선호도를 반영한 맞춤 레시피</p>
-        <button className="ghost-btn">AI 상담 시작하기</button>
+        <h3>/api/ai/diet/recommend 연동 준비 완료</h3>
+        <p>현재는 목록 조회 중심으로 연결되어 있으며, 추천 요청은 다음 단계에서 바로 확장 가능합니다.</p>
       </section>
 
-      <h3 className="section-title">나의 식단 기록</h3>
+      <h3 className="section-title">공개 레시피</h3>
       <div className="recipe-grid">
-        {recipeCards.map((recipe) => (
-          <article key={recipe.id} className="recipe-mini">
-            <img src={recipe.image} alt={recipe.title} />
-            <p>{recipe.title}</p>
+        {visibleRecipes.map((recipe) => (
+          <article key={recipe.recipeId} className="recipe-mini">
+            <img src={fallbackImage} alt={recipe.recipeTitle} />
+            <p>{recipe.recipeTitle}</p>
           </article>
         ))}
       </div>
@@ -120,31 +182,37 @@ function HomeScreen() {
   );
 }
 
-function SearchScreen() {
+function SearchScreen({ recipes }: { recipes: Recipe[] }) {
+  const [keyword, setKeyword] = useState("");
+  const filtered = useMemo(() => {
+    if (!keyword.trim()) {
+      return recipes;
+    }
+    const normalized = keyword.trim().toLowerCase();
+    return recipes.filter((recipe) => recipe.recipeTitle.toLowerCase().includes(normalized));
+  }, [keyword, recipes]);
+
   return (
     <div className="page">
       <h2 className="page-title">레시피 검색</h2>
-      <input className="search-box" placeholder="요리 이름으로 검색..." />
-      <button className="primary-btn compact">우리 아이 맞춤 필터</button>
+      <input
+        className="search-box"
+        placeholder="요리 이름으로 검색..."
+        value={keyword}
+        onChange={(event) => setKeyword(event.target.value)}
+      />
 
-      <div className="chip-row">
-        <span className="chip">#트렌드</span>
-        <span className="chip">#저지방</span>
-        <span className="chip">#알러지프리</span>
-        <span className="chip">#면역력</span>
-      </div>
-
-      <p className="result-text">총 3개의 레시피</p>
+      <p className="result-text">총 {filtered.length}개의 레시피</p>
 
       <div className="recipe-list">
-        {recipeCards.map((recipe) => (
-          <article key={recipe.id} className="recipe-item">
-            <img src={recipe.image} alt={recipe.title} />
+        {filtered.map((recipe) => (
+          <article key={recipe.recipeId} className="recipe-item">
+            <img src={fallbackImage} alt={recipe.recipeTitle} />
             <div>
-              <h4>{recipe.title}</h4>
-              <p>{recipe.tags.join("  ")}</p>
+              <h4>{recipe.recipeTitle}</h4>
+              <p>{recipe.recipePurpose ?? "레시피 목적 정보 없음"}</p>
               <small>
-                ⭐ {recipe.rating} · {recipe.author}
+                공개 여부: {recipe.isPublic ? "공개" : "비공개"} · AI 생성: {recipe.isAiGenerated ? "Y" : "N"}
               </small>
             </div>
           </article>
@@ -154,61 +222,57 @@ function SearchScreen() {
   );
 }
 
-function CommunityScreen() {
+function CommunityScreen({ posts }: { posts: CommunityPost[] }) {
+  const firstPost = posts[0];
+
   return (
     <div className="page">
       <h2 className="page-title">커뮤니티</h2>
-      <p className="muted">반려동물 식단에 대한 이야기를 나눠보세요</p>
+      <p className="muted">`/api/community/posts` 실데이터 연동</p>
 
-      <div className="chip-row">
-        <span className="chip active">전체</span>
-        <span className="chip">레시피</span>
-        <span className="chip">질문</span>
-        <span className="chip">후기</span>
-      </div>
-
-      <article className="post-card">
-        <strong>멍멍이엄마</strong>
-        <p>
-          오늘 초코한테 닭가슴살 야채 볶음 만들어줬어요! 너무 잘 먹네요 🙂
-          <br />
-          #닭가슴살 #야채볶음
-        </p>
-        <img
-          src="https://images.unsplash.com/photo-1543466835-00a7907e9de1?auto=format&fit=crop&w=900&q=80"
-          alt="커뮤니티 이미지"
-        />
-      </article>
+      {firstPost ? (
+        <article className="post-card">
+          <strong>{firstPost.postTitle || "제목 없음"}</strong>
+          <p>{firstPost.postContentPreview || firstPost.postContent || "내용 없음"}</p>
+          {firstPost.postImageUrl ? <img src={firstPost.postImageUrl} alt="커뮤니티 이미지" /> : null}
+        </article>
+      ) : (
+        <p className="muted">표시할 게시글이 없습니다.</p>
+      )}
     </div>
   );
 }
 
-function ProfileScreen({ onLogout }: { onLogout: () => void }) {
+function ProfileScreen({
+  profile,
+  pets,
+  onLogout,
+}: {
+  profile: UserProfile | null;
+  pets: Pet[];
+  onLogout: () => void;
+}) {
   return (
     <div className="page">
       <section className="profile-header">
-        <h2>김반려</h2>
-        <p>petlover@email.com</p>
+        <h2>{profile?.userNickname ?? profile?.userName ?? "사용자"}</h2>
+        <p>상태: {profile?.userStatus ?? "정보 없음"}</p>
       </section>
 
       <section className="profile-card">
-        <h3>우리 아이들</h3>
-        <div className="pet-item">
-          <img src={recipeCards[0].image} alt="초코" />
-          <div>
-            <strong>초코</strong>
-            <p>골든 리트리버 · 3살</p>
-            <small>알러지: 닭고기, 밀</small>
+        <h3>내 반려동물</h3>
+        {pets.map((pet) => (
+          <div key={pet.petId} className="pet-item">
+            <img src={pet.petProfileImageUrl ?? fallbackImage} alt={pet.petName} />
+            <div>
+              <strong>{pet.petName}</strong>
+              <p>
+                {pet.petType ?? "타입 정보 없음"} · {pet.breedName ?? "품종 정보 없음"}
+              </p>
+              <small>알러지 ID: {(pet.allergyIds ?? []).join(", ") || "없음"}</small>
+            </div>
           </div>
-        </div>
-        <div className="pet-item">
-          <img src={recipeCards[2].image} alt="나비" />
-          <div>
-            <strong>나비</strong>
-            <p>코리안 숏헤어 · 2살</p>
-            <small>알러지: 생선</small>
-          </div>
-        </div>
+        ))}
       </section>
 
       <button className="logout-btn" type="button" onClick={onLogout}>

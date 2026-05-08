@@ -43,6 +43,11 @@ body {
   gap: 12px;
 }
 
+.login-form {
+  display: grid;
+  gap: 10px;
+}
+
 .logo-circle {
   width: 64px;
   height: 64px;
@@ -99,6 +104,11 @@ body {
   cursor: pointer;
 }
 
+.primary-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .kakao-btn {
   border: 0;
   background: #fee500;
@@ -106,6 +116,18 @@ body {
   padding: 12px;
   font-size: 16px;
   cursor: pointer;
+}
+
+.divider {
+  text-align: center;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.error-text {
+  margin: 0;
+  color: #b91c1c;
+  font-size: 13px;
 }
 
 .page {
