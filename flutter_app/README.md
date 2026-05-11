@@ -1,28 +1,16 @@
-# Flutter 버전 실행 방법
+# chowchow
 
-## 1) Flutter 설치 확인
+A new Flutter project.
 
-```bash
-flutter --version
-flutter doctor
-```
+## Getting Started
 
-## 2) 의존성 설치
+This project is a starting point for a Flutter application.
 
-```bash
-cd flutter_app
-flutter pub get
-```
+A few resources to get you started if this is your first Flutter project:
 
-## 3) 실행
+- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
+- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
 
-```bash
-flutter run
-```
-
-안드로이드 기기 지정 실행:
-
-```bash
-flutter devices
-flutter run -d <device_id>
-```
+For help getting started with Flutter development, view the
+[online documentation](https://docs.flutter.dev/), which offers tutorials,
+samples, guidance on mobile development, and a full API reference.
