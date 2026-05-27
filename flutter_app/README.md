@@ -1,16 +1,39 @@
-# chowchow
+# Flutter 버전 실행 방법
 
-A new Flutter project.
+## 1) Flutter 설치 확인
 
-## Getting Started
+```bash
+flutter --version
+flutter doctor
+```
 
-This project is a starting point for a Flutter application.
+## 2) 의존성 설치
 
-A few resources to get you started if this is your first Flutter project:
+```bash
+cd flutter_app
+flutter pub get
+```
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+## 3) Windows 창으로 실행 (Android Studio 불필요, 추천)
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+```bash
+cd flutter_app
+flutter run -d windows
+```
+
+또는 `run_windows.bat` 더블클릭.
+
+첫 빌드는 2~5분 걸릴 수 있습니다. 완료되면 **별도 데스크톱 창**에 앱이 뜹니다.
+
+## 4) 안드로이드 / 기타
+
+```bash
+flutter run
+```
+
+안드로이드 기기 지정 실행:
+
+```bash
+flutter devices
+flutter run -d <device_id>
+```

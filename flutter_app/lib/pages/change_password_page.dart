@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../theme/chow_theme.dart';
+import '../widgets/auth_account_ui.dart';
 
 class ChangePasswordPage extends StatefulWidget {
   const ChangePasswordPage({super.key});
@@ -11,58 +12,118 @@ class ChangePasswordPage extends StatefulWidget {
 }
 
 class _ChangePasswordPageState extends State<ChangePasswordPage> {
-  bool _o = false, _n = false, _c = false;
+  final _current = TextEditingController();
+  final _newPass = TextEditingController();
+  final _confirm = TextEditingController();
+
+  bool _showCurrent = false;
+  bool _showNew = false;
+  bool _showConfirm = false;
+
+  @override
+  void initState() {
+    super.initState();
+    for (final c in [_current, _newPass, _confirm]) {
+      c.addListener(() => setState(() {}));
+    }
+  }
+
+  @override
+  void dispose() {
+    _current.dispose();
+    _newPass.dispose();
+    _confirm.dispose();
+    super.dispose();
+  }
+
+  bool get _isValid {
+    return _current.text.isNotEmpty &&
+        _newPass.text.length >= 8 &&
+        _confirm.text.isNotEmpty &&
+        _newPass.text == _confirm.text;
+  }
+
+  bool get _isMismatch =>
+      _confirm.text.isNotEmpty && _newPass.text != _confirm.text;
+
+  bool get _isMatch =>
+      _confirm.text.isNotEmpty && _newPass.text == _confirm.text;
+
+  void _submit() {
+    if (!_isValid) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('비밀번호가 성공적으로 변경되었습니다.')),
+    );
+    context.go('/profile');
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => context.pop()),
-        title: const Text('비밀번호 변경'),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(24),
+    return AuthAccountScaffold(
+      title: '비밀번호 변경',
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          TextField(
-            obscureText: !_o,
-            decoration: InputDecoration(
-              labelText: '현재 비밀번호',
-              suffixIcon: IconButton(onPressed: () => setState(() => _o = !_o), icon: Icon(_o ? Icons.visibility_off : Icons.visibility)),
+          const AuthLockIcon(subtitle: '안전한 비밀번호로 변경해주세요'),
+          const AuthFieldLabel(label: '현재 비밀번호'),
+          AuthTextField(
+            controller: _current,
+            hintText: '현재 비밀번호를 입력하세요',
+            obscureText: !_showCurrent,
+            onToggleVisibility: () => setState(() => _showCurrent = !_showCurrent),
+          ),
+          const SizedBox(height: 20),
+          const AuthFieldLabel(label: '새 비밀번호'),
+          AuthTextField(
+            controller: _newPass,
+            hintText: '새 비밀번호를 입력하세요 (8자 이상)',
+            obscureText: !_showNew,
+            onToggleVisibility: () => setState(() => _showNew = !_showNew),
+          ),
+          const Padding(
+            padding: EdgeInsets.only(top: 6),
+            child: Text(
+              '영문, 숫자, 특수문자 조합 8자 이상',
+              style: TextStyle(fontSize: 12, color: ChowColors.gray500),
             ),
           ),
-          const SizedBox(height: 12),
-          TextField(
-            obscureText: !_n,
-            decoration: InputDecoration(
-              labelText: '새 비밀번호',
-              suffixIcon: IconButton(onPressed: () => setState(() => _n = !_n), icon: Icon(_n ? Icons.visibility_off : Icons.visibility)),
-            ),
+          const SizedBox(height: 20),
+          const AuthFieldLabel(label: '새 비밀번호 확인'),
+          AuthTextField(
+            controller: _confirm,
+            hintText: '새 비밀번호를 다시 입력하세요',
+            obscureText: !_showConfirm,
+            onToggleVisibility: () => setState(() => _showConfirm = !_showConfirm),
           ),
-          const SizedBox(height: 12),
-          TextField(
-            obscureText: !_c,
-            decoration: InputDecoration(
-              labelText: '새 비밀번호 확인',
-              suffixIcon: IconButton(onPressed: () => setState(() => _c = !_c), icon: Icon(_c ? Icons.visibility_off : Icons.visibility)),
-            ),
-          ),
-          const SizedBox(height: 28),
-          DecoratedBox(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              gradient: const LinearGradient(colors: [ChowColors.orange400, ChowColors.orange500]),
-            ),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(12),
-                onTap: () => context.go('/profile'),
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 16),
-                  child: Center(child: Text('변경하기', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 16))),
-                ),
+          if (_isMismatch)
+            const Padding(
+              padding: EdgeInsets.only(top: 6),
+              child: Text(
+                '비밀번호가 일치하지 않습니다',
+                style: TextStyle(fontSize: 12, color: ChowColors.red500),
               ),
             ),
+          if (_isMatch)
+            const Padding(
+              padding: EdgeInsets.only(top: 6),
+              child: Row(
+                children: [
+                  Icon(Icons.check_circle_outline, size: 16, color: ChowColors.green500),
+                  SizedBox(width: 4),
+                  Text(
+                    '비밀번호가 일치합니다',
+                    style: TextStyle(fontSize: 12, color: ChowColors.green500),
+                  ),
+                ],
+              ),
+            ),
+          const SizedBox(height: 20),
+          const AuthInfoBox(),
+          const SizedBox(height: 28),
+          AuthPrimaryButton(
+            label: '비밀번호 변경',
+            enabled: _isValid,
+            onPressed: _submit,
           ),
         ],
       ),

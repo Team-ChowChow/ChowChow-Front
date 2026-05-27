@@ -25,9 +25,20 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   project.set_dart_entrypoint_arguments(std::move(command_line_arguments));
 
   FlutterWindow window(project);
-  Win32Window::Point origin(10, 10);
-  Win32Window::Size size(1280, 720);
-  if (!window.Create(L"chowchow", origin, size)) {
+  // Phone logical size 390x844 + window chrome
+  const unsigned int phone_width = 414;
+  const unsigned int phone_height = 900;
+  const int screen_w = ::GetSystemMetrics(SM_CXSCREEN);
+  const int screen_h = ::GetSystemMetrics(SM_CYSCREEN);
+  Win32Window::Point origin(
+      (screen_w > static_cast<int>(phone_width))
+          ? static_cast<unsigned int>((screen_w - phone_width) / 2)
+          : 10,
+      (screen_h > static_cast<int>(phone_height))
+          ? static_cast<unsigned int>((screen_h - phone_height) / 2)
+          : 10);
+  Win32Window::Size size(phone_width, phone_height);
+  if (!window.Create(L"chowchow_flutter", origin, size)) {
     return EXIT_FAILURE;
   }
   window.SetQuitOnClose(true);

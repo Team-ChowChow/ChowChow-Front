@@ -21,7 +21,7 @@ final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 GoRouter createAppRouter() {
   return GoRouter(
     navigatorKey: rootNavigatorKey,
-    initialLocation: '/',
+    initialLocation: '/login',
     routes: [
       ShellRoute(
         builder: (context, state, child) => MainShell(child: child),

@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 
 import '../theme/chow_theme.dart';
@@ -9,12 +11,129 @@ class CharacterPage extends StatefulWidget {
   State<CharacterPage> createState() => _CharacterPageState();
 }
 
-class _CharacterPageState extends State<CharacterPage> {
-  static const _stats = (level: 12, exp: 750, maxExp: 1000, health: 85, happiness: 92, hunger: 45);
+class _CharacterPageState extends State<CharacterPage> with TickerProviderStateMixin {
+  int level = 12;
+  int exp = 750;
+  int maxExp = 1000;
+  int health = 85;
+  int happiness = 92;
+  int hunger = 45;
+
+  bool _isInteracting = false;
+  final List<_Particle> _particles = [];
+  final _random = Random();
+
+  late final AnimationController _idleCtrl;
+  late final AnimationController _interactCtrl;
+  late final Animation<double> _idleScale;
+  late final Animation<double> _idleRotate;
+
+  _InteractAnim _interactAnim = _InteractAnim.bounce;
+
+  static const _activities = [
+    _ActivityData(Icons.restaurant, '밥주기', 0, ChowColors.orange500, '🍖'),
+    _ActivityData(Icons.favorite, '쓰다듬기', 0, ChowColors.pink500, '💕'),
+    _ActivityData(Icons.fitness_center, '운동하기', 50, Color(0xFF3B82F6), '💪'),
+    _ActivityData(Icons.auto_awesome, '목욕시키기', 100, ChowColors.purple500, '✨'),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _idleCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 3000))..repeat(reverse: true);
+    _idleScale = Tween<double>(begin: 1, end: 1.05).animate(CurvedAnimation(parent: _idleCtrl, curve: Curves.easeInOut));
+    _idleRotate = Tween<double>(begin: -0.035, end: 0.035).animate(CurvedAnimation(parent: _idleCtrl, curve: Curves.easeInOut));
+    _interactCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 600));
+  }
+
+  @override
+  void dispose() {
+    _idleCtrl.dispose();
+    _interactCtrl.dispose();
+    super.dispose();
+  }
+
+  double get _expFrac => exp / maxExp;
+
+  ({double dy, double scale, double rotate}) _interactTransform(double t) {
+    switch (_interactAnim) {
+      case _InteractAnim.bounce:
+        final y = t < 0.5 ? -40 * sin(t * pi) : -10 * (1 - t);
+        return (dy: y, scale: 1 + 0.1 * sin(t * pi), rotate: 0.17 * sin(t * pi * 2));
+      case _InteractAnim.shake:
+        return (dy: 0, scale: 1, rotate: 0,);
+      case _InteractAnim.scale:
+        return (dy: 0, scale: 1 + 0.15 * sin(t * pi), rotate: 0);
+      case _InteractAnim.wiggle:
+        return (dy: -8 * sin(t * pi * 4), scale: 1, rotate: 0.12 * sin(t * pi * 4));
+    }
+  }
+
+  Future<void> _runInteract(_InteractAnim anim, {Duration? duration, VoidCallback? onDone}) async {
+    if (_isInteracting) return;
+    setState(() => _isInteracting = true);
+    _idleCtrl.stop();
+    _interactAnim = anim;
+    _interactCtrl.duration = duration ?? const Duration(milliseconds: 600);
+    await _interactCtrl.forward(from: 0);
+    onDone?.call();
+    if (mounted) {
+      setState(() => _isInteracting = false);
+      _idleCtrl.repeat(reverse: true);
+    }
+  }
+
+  Future<void> _handlePetClick() async {
+    await _runInteract(_InteractAnim.bounce, onDone: () {
+      _spawnParticles(['💕', '❤️', '💖', '✨'], count: 6);
+      happiness = (happiness + 5).clamp(0, 100);
+    });
+    setState(() {});
+  }
+
+  Future<void> _handleActivity(_ActivityData activity) async {
+    switch (activity.label) {
+      case '밥주기':
+        await _runInteract(_InteractAnim.wiggle, duration: const Duration(milliseconds: 500), onDone: () {
+          hunger = (hunger - 20).clamp(0, 100);
+          health = (health + 5).clamp(0, 100);
+        });
+      case '쓰다듬기':
+        await _runInteract(_InteractAnim.scale, duration: const Duration(milliseconds: 400), onDone: () {
+          happiness = (happiness + 10).clamp(0, 100);
+        });
+      case '운동하기':
+        await _runInteract(_InteractAnim.shake, duration: const Duration(milliseconds: 1000), onDone: () {
+          health = (health + 10).clamp(0, 100);
+          hunger = (hunger + 10).clamp(0, 100);
+        });
+      case '목욕시키기':
+        await _runInteract(_InteractAnim.wiggle, duration: const Duration(milliseconds: 800), onDone: () {
+          happiness = (happiness + 15).clamp(0, 100);
+        });
+    }
+    _spawnParticles([activity.emoji], count: 8);
+    setState(() {});
+  }
+
+  void _spawnParticles(List<String> emojis, {required int count}) {
+    final batch = List<_Particle>.generate(count, (i) {
+      return _Particle(
+        id: DateTime.now().millisecondsSinceEpoch + i,
+        emoji: emojis[_random.nextInt(emojis.length)],
+        dx: _random.nextDouble() * 200 - 100,
+        dy: _random.nextDouble() * 200 - 100,
+      );
+    });
+    setState(() => _particles.addAll(batch));
+    Future.delayed(const Duration(milliseconds: 1500), () {
+      if (!mounted) return;
+      setState(() => _particles.removeWhere((p) => batch.any((b) => b.id == p.id)));
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    final expFrac = _stats.exp / _stats.maxExp;
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -30,7 +149,10 @@ class _CharacterPageState extends State<CharacterPage> {
               bottom: false,
               child: Container(
                 width: double.infinity,
-                color: Colors.white,
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  border: Border(bottom: BorderSide(color: ChowColors.gray200)),
+                ),
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 14),
                 child: const Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -53,96 +175,109 @@ class _CharacterPageState extends State<CharacterPage> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                         decoration: BoxDecoration(color: ChowColors.orange50, borderRadius: BorderRadius.circular(999)),
-                        child: const Row(
+                        child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.auto_awesome, size: 16, color: ChowColors.orange500),
-                            SizedBox(width: 6),
-                            Text('레벨 12', style: TextStyle(fontSize: 13, color: ChowColors.orange600)),
+                            const Icon(Icons.auto_awesome, size: 16, color: ChowColors.orange500),
+                            const SizedBox(width: 6),
+                            Text('레벨 $level', style: const TextStyle(fontSize: 13, color: ChowColors.orange600)),
                           ],
                         ),
                       ),
                       const SizedBox(height: 16),
-                      Container(
+                      SizedBox(
                         width: 192,
                         height: 192,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFFFED7AA), Color(0xFFFDBA74)],
-                          ),
-                          boxShadow: const [
-                            BoxShadow(blurRadius: 12, offset: Offset(0, 4), color: Color(0x33000000)),
+                        child: Stack(
+                          alignment: Alignment.center,
+                          clipBehavior: Clip.none,
+                          children: [
+                            AnimatedBuilder(
+                              animation: Listenable.merge([_idleCtrl, _interactCtrl]),
+                              builder: (context, child) {
+                                final t = _interactCtrl.value;
+                                final usingInteract = _isInteracting || t > 0;
+                                final tr = usingInteract ? _interactTransform(t) : (dy: 0.0, scale: _idleScale.value, rotate: _idleRotate.value);
+                                var dx = 0.0;
+                                if (usingInteract && _interactAnim == _InteractAnim.shake) {
+                                  dx = 20 * sin(t * pi * 8);
+                                }
+                                return Transform.translate(
+                                  offset: Offset(dx, tr.dy),
+                                  child: Transform.rotate(
+                                    angle: tr.rotate,
+                                    child: Transform.scale(scale: tr.scale, child: child),
+                                  ),
+                                );
+                              },
+                              child: GestureDetector(
+                                onTap: _handlePetClick,
+                                child: Container(
+                                  width: 192,
+                                  height: 192,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    gradient: const LinearGradient(
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                      colors: [Color(0xFFFED7AA), Color(0xFFFDBA74)],
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withValues(alpha: 0.15),
+                                        blurRadius: 16,
+                                        offset: const Offset(0, 8),
+                                      ),
+                                    ],
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: const Text('🐶', style: TextStyle(fontSize: 72)),
+                                ),
+                              ),
+                            ),
+                            ..._particles.map(_ParticleWidget.new),
                           ],
                         ),
-                        alignment: Alignment.center,
-                        child: const Text('🐶', style: TextStyle(fontSize: 72)),
                       ),
                       const SizedBox(height: 12),
                       const Text('초코', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: ChowColors.gray800)),
                       const Text('건강한 골든 리트리버', style: TextStyle(fontSize: 13, color: ChowColors.gray500)),
+                      const SizedBox(height: 8),
+                      const Text('👆 클릭해서 쓰다듬어 주세요!', style: TextStyle(fontSize: 12, color: ChowColors.orange500)),
                       const SizedBox(height: 20),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           const Text('경험치', style: TextStyle(fontSize: 13, color: ChowColors.gray600)),
-                          Text('${_stats.exp} / ${_stats.maxExp}', style: const TextStyle(fontSize: 13, color: ChowColors.gray800, fontWeight: FontWeight.w600)),
+                          Text('$exp / $maxExp', style: const TextStyle(fontSize: 13, color: ChowColors.gray800, fontWeight: FontWeight.w600)),
                         ],
                       ),
                       const SizedBox(height: 8),
                       ClipRRect(
                         borderRadius: BorderRadius.circular(999),
                         child: SizedBox(
-                          height: 10,
-                          child: TweenAnimationBuilder<double>(
-                            tween: Tween(begin: 0, end: expFrac),
-                            duration: const Duration(milliseconds: 500),
-                            curve: Curves.easeOutCubic,
-                            builder: (context, value, _) {
-                              return Stack(
-                                children: [
-                                  Container(color: ChowColors.gray200),
-                                  FractionallySizedBox(
-                                    widthFactor: value.clamp(0.0, 1.0),
-                                    child: Container(
-                                      decoration: const BoxDecoration(
-                                        gradient: LinearGradient(colors: [ChowColors.orange400, ChowColors.orange500]),
-                                      ),
-                                    ),
+                          height: 12,
+                          child: Stack(
+                            children: [
+                              Container(color: ChowColors.gray200),
+                              FractionallySizedBox(
+                                widthFactor: _expFrac.clamp(0.0, 1.0),
+                                child: Container(
+                                  decoration: const BoxDecoration(
+                                    gradient: LinearGradient(colors: [ChowColors.orange400, ChowColors.orange500]),
                                   ),
-                                ],
-                              );
-                            },
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
                       const SizedBox(height: 16),
-                      _StatRow(
-                        icon: Icons.favorite,
-                        iconBg: const Color(0xFFFEE2E2),
-                        iconColor: ChowColors.red500,
-                        label: '건강',
-                        value: _stats.health,
-                        barColor: ChowColors.red500,
-                      ),
+                      _StatRow(icon: Icons.favorite, iconBg: Color(0xFFFEE2E2), iconColor: ChowColors.red500, label: '건강', value: health, barColor: ChowColors.red500),
                       const SizedBox(height: 10),
-                      _StatRow(
-                        icon: Icons.auto_awesome,
-                        iconBg: const Color(0xFFFEF9C3),
-                        iconColor: ChowColors.yellow500,
-                        label: '행복',
-                        value: _stats.happiness,
-                        barColor: ChowColors.yellow500,
-                      ),
+                      _StatRow(icon: Icons.auto_awesome, iconBg: Color(0xFFFEF9C3), iconColor: ChowColors.yellow500, label: '행복', value: happiness, barColor: ChowColors.yellow500),
                       const SizedBox(height: 10),
-                      _StatRow(
-                        icon: Icons.restaurant,
-                        iconBg: ChowColors.orange100,
-                        iconColor: ChowColors.orange500,
-                        label: '배고픔',
-                        value: _stats.hunger,
-                        barColor: ChowColors.orange500,
-                      ),
+                      _StatRow(icon: Icons.restaurant, iconBg: ChowColors.orange100, iconColor: ChowColors.orange500, label: '배고픔', value: hunger, barColor: ChowColors.orange500),
                     ],
                   ),
                 ),
@@ -160,26 +295,21 @@ class _CharacterPageState extends State<CharacterPage> {
                         crossAxisSpacing: 10,
                         mainAxisSpacing: 10,
                         childAspectRatio: 1.15,
-                        children: const [
-                          _ActivityTile(icon: Icons.restaurant, label: '밥주기', cost: 0, color: ChowColors.orange500),
-                          _ActivityTile(icon: Icons.favorite, label: '쓰다듬기', cost: 0, color: ChowColors.pink500),
-                          _ActivityTile(icon: Icons.fitness_center, label: '운동하기', cost: 50, color: Color(0xFF3B82F6)),
-                          _ActivityTile(icon: Icons.auto_awesome, label: '목욕시키기', cost: 100, color: ChowColors.purple500),
-                        ],
+                        children: _activities.map((a) => _ActivityTile(activity: a, onTap: () => _handleActivity(a))).toList(),
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 16),
-                _WhiteCard(
+                const _WhiteCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('최근 업적', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: ChowColors.gray800)),
-                      const SizedBox(height: 12),
+                      Text('최근 업적', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: ChowColors.gray800)),
+                      SizedBox(height: 12),
                       _AchievementRow(emoji: '🏆', title: '첫 식단 완료', date: '2026.03.20', bg: ChowColors.orange50, circle: ChowColors.orange500),
-                      const SizedBox(height: 10),
-                      _AchievementRow(emoji: '⭐', title: '7일 연속 접속', date: '2026.03.18', bg: const Color(0xFFEFF6FF), circle: Color(0xFF3B82F6)),
+                      SizedBox(height: 10),
+                      _AchievementRow(emoji: '⭐', title: '7일 연속 접속', date: '2026.03.18', bg: Color(0xFFEFF6FF), circle: Color(0xFF3B82F6)),
                     ],
                   ),
                 ),
@@ -192,9 +322,71 @@ class _CharacterPageState extends State<CharacterPage> {
   }
 }
 
+enum _InteractAnim { bounce, shake, scale, wiggle }
+
+class _ActivityData {
+  const _ActivityData(this.icon, this.label, this.cost, this.color, this.emoji);
+  final IconData icon;
+  final String label;
+  final int cost;
+  final Color color;
+  final String emoji;
+}
+
+class _Particle {
+  _Particle({required this.id, required this.emoji, required this.dx, required this.dy});
+  final int id;
+  final String emoji;
+  final double dx;
+  final double dy;
+}
+
+class _ParticleWidget extends StatefulWidget {
+  const _ParticleWidget(this.particle);
+  final _Particle particle;
+
+  @override
+  State<_ParticleWidget> createState() => _ParticleWidgetState();
+}
+
+class _ParticleWidgetState extends State<_ParticleWidget> with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1500))..forward();
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (context, child) {
+        final t = Curves.easeOut.transform(_ctrl.value);
+        final scale = t < 0.5 ? t * 3 : (1 - t) * 3;
+        return Positioned(
+          left: 96 + widget.particle.dx * t,
+          top: 96 + widget.particle.dy * t,
+          child: Opacity(
+            opacity: (1 - t).clamp(0.0, 1.0),
+            child: Transform.scale(scale: scale.clamp(0.0, 1.5), child: child),
+          ),
+        );
+      },
+      child: Text(widget.particle.emoji, style: const TextStyle(fontSize: 24)),
+    );
+  }
+}
+
 class _WhiteCard extends StatelessWidget {
   const _WhiteCard({required this.child});
-
   final Widget child;
 
   @override
@@ -205,9 +397,7 @@ class _WhiteCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(22),
-        boxShadow: const [
-          BoxShadow(blurRadius: 10, offset: Offset(0, 3), color: Color(0x14000000)),
-        ],
+        boxShadow: const [BoxShadow(blurRadius: 10, offset: Offset(0, 3), color: Color(0x14000000))],
       ),
       child: child,
     );
@@ -251,10 +441,7 @@ class _StatRow extends StatelessWidget {
               child: Stack(
                 children: [
                   Container(color: ChowColors.gray200),
-                  FractionallySizedBox(
-                    widthFactor: (value / 100).clamp(0.0, 1.0),
-                    child: Container(color: barColor),
-                  ),
+                  FractionallySizedBox(widthFactor: (value / 100).clamp(0.0, 1.0), child: Container(color: barColor)),
                 ],
               ),
             ),
@@ -271,17 +458,9 @@ class _StatRow extends StatelessWidget {
 }
 
 class _ActivityTile extends StatelessWidget {
-  const _ActivityTile({
-    required this.icon,
-    required this.label,
-    required this.cost,
-    required this.color,
-  });
-
-  final IconData icon;
-  final String label;
-  final int cost;
-  final Color color;
+  const _ActivityTile({required this.activity, required this.onTap});
+  final _ActivityData activity;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -289,8 +468,8 @@ class _ActivityTile extends StatelessWidget {
       color: ChowColors.gray50,
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(16),
-        onTap: () {},
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Column(
@@ -299,15 +478,15 @@ class _ActivityTile extends StatelessWidget {
               Container(
                 width: 48,
                 height: 48,
-                decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(12)),
-                child: Icon(icon, color: Colors.white, size: 26),
+                decoration: BoxDecoration(color: activity.color, borderRadius: BorderRadius.circular(12)),
+                child: Icon(activity.icon, color: Colors.white, size: 26),
               ),
               const SizedBox(height: 8),
-              Text(label, style: const TextStyle(fontSize: 13, color: ChowColors.gray800, fontWeight: FontWeight.w500)),
+              Text(activity.label, style: const TextStyle(fontSize: 13, color: ChowColors.gray800, fontWeight: FontWeight.w500)),
               const SizedBox(height: 2),
               Text(
-                cost > 0 ? '🪙 $cost' : '무료',
-                style: TextStyle(fontSize: 11, color: cost > 0 ? ChowColors.orange600 : ChowColors.green500),
+                activity.cost > 0 ? '🪙 ${activity.cost}' : '무료',
+                style: TextStyle(fontSize: 11, color: activity.cost > 0 ? ChowColors.orange600 : ChowColors.green500),
               ),
             ],
           ),
